@@ -14,11 +14,10 @@ use DateTimeImmutable;
 
 readonly class DepositService
 {
-    public const float MAX_AMOUNT = 10000.0;
-
     public function __construct(
         private WalletRepositoryInterface $walletRepository,
         private AtomicOperationRunnerInterface $atomicOperationRunner,
+        private float $maxDepositAmount,
     ) {
     }
 
@@ -30,8 +29,8 @@ readonly class DepositService
             throw InvalidAmountException::notPositive();
         }
 
-        if ((float) $amount > self::MAX_AMOUNT) {
-            throw InvalidAmountException::exceedsMaximum(self::MAX_AMOUNT);
+        if ((float) $amount > $this->maxDepositAmount) {
+            throw InvalidAmountException::exceedsMaximum($this->maxDepositAmount);
         }
 
         // Locking the wallet inside a transaction keeps two deposits landing at the same

@@ -18,6 +18,8 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class DepositServiceTest extends TestCase
 {
+    private const float MAX_AMOUNT = 10000.0;
+
     private WalletRepositoryInterface $walletRepository;
     private DepositService $depositService;
 
@@ -30,7 +32,7 @@ class DepositServiceTest extends TestCase
             ->method('run')
             ->willReturnCallback(static fn (callable $operation): mixed => $operation());
 
-        $this->depositService = new DepositService($this->walletRepository, $atomicOperationRunner);
+        $this->depositService = new DepositService($this->walletRepository, $atomicOperationRunner, self::MAX_AMOUNT);
     }
 
     public function testDepositSuccessfully(): void
@@ -90,7 +92,7 @@ class DepositServiceTest extends TestCase
         // Reading the balance without a lock is what makes concurrent deposits lose money.
         $this->walletRepository->expects(self::never())->method('findById');
 
-        $result = new DepositService($this->walletRepository, $runner)->deposit(1, 1, '300.00');
+        $result = new DepositService($this->walletRepository, $runner, self::MAX_AMOUNT)->deposit(1, 1, '300.00');
 
         self::assertSame(500.0, $result->getBalance());
     }
@@ -123,9 +125,9 @@ class DepositServiceTest extends TestCase
 
         $this->walletRepository->method('findByIdForUpdate')->willReturn($wallet);
 
-        $this->depositService->deposit(1, 1, (string) DepositService::MAX_AMOUNT);
+        $this->depositService->deposit(1, 1, (string) self::MAX_AMOUNT);
 
-        self::assertSame(DepositService::MAX_AMOUNT, $wallet->getBalance());
+        self::assertSame(self::MAX_AMOUNT, $wallet->getBalance());
     }
 
     public function testDepositThrowsWhenWalletNotFound(): void

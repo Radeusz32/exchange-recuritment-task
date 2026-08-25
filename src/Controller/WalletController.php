@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Dto\Request\CreateWalletRequest;
+use App\Dto\Request\DepositRequest;
+use App\Dto\Request\TransferRequest;
 use App\Dto\TransactionResponse;
 use App\Dto\WalletResponse;
 use App\Entity\User;
-use App\Enum\Currency;
 use App\Exception\InsufficientFundsException;
 use App\Exception\InvalidAmountException;
+use App\Exception\InvalidRequestException;
 use App\Exception\SameWalletTransferException;
 use App\Exception\WalletAlreadyExistsException;
 use App\Exception\WalletBlockedException;
@@ -28,7 +31,6 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Http\Attribute\CurrentUser;
-use ValueError;
 
 #[Route('/api/wallets')]
 final class WalletController extends AbstractController
@@ -53,24 +55,11 @@ final class WalletController extends AbstractController
     #[Route('', methods: ['POST'])]
     public function create(Request $request, #[CurrentUser] User $user): JsonResponse
     {
-        $data = $this->decodeBody($request);
-
-        if (null === $data) {
-            return new JsonResponse(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (!isset($data['currency'])) {
-            return new JsonResponse(['error' => 'Missing required field: currency.'], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
-            $currency = Currency::from($data['currency']);
-        } catch (ValueError) {
-            return new JsonResponse(['error' => 'Invalid currency.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        try {
-            $wallet = $this->walletService->createWallet($user->getIdNotNull(), $currency);
+            $payload = CreateWalletRequest::fromArray($this->decodeBody($request));
+            $wallet = $this->walletService->createWallet($user->getIdNotNull(), $payload->currency);
+        } catch (InvalidRequestException $e) {
+            return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
         } catch (WalletAlreadyExistsException $e) {
             return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_CONFLICT);
         }
@@ -81,32 +70,18 @@ final class WalletController extends AbstractController
     #[Route('/transfer', methods: ['POST'])]
     public function transfer(Request $request, #[CurrentUser] User $user): JsonResponse
     {
-        $data = $this->decodeBody($request);
-
-        if (null === $data) {
-            return new JsonResponse(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        foreach (['fromWalletId', 'toWalletId', 'amount'] as $field) {
-            if (!isset($data[$field])) {
-                return new JsonResponse(['error' => sprintf('Missing required field: %s.', $field)], Response::HTTP_BAD_REQUEST);
-            }
-        }
-
-        if (!is_numeric($data['amount']) || (float) $data['amount'] <= 0) {
-            return new JsonResponse(['error' => 'Amount must be a positive number.'], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
+            $payload = TransferRequest::fromArray($this->decodeBody($request));
+
             $transaction = $this->transferService->transfer(
                 $user->getIdNotNull(),
-                (int) $data['fromWalletId'],
-                (int) $data['toWalletId'],
-                (string) $data['amount'],
+                $payload->fromWalletId,
+                $payload->toWalletId,
+                $payload->amount,
             );
         } catch (WalletNotFoundException $e) {
             return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_NOT_FOUND);
-        } catch (InvalidAmountException $e) {
+        } catch (InvalidRequestException|InvalidAmountException $e) {
             return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
         } catch (SameWalletTransferException|WalletBlockedException|InsufficientFundsException $e) {
             return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
@@ -118,27 +93,15 @@ final class WalletController extends AbstractController
     #[Route('/{id}/deposit', methods: ['POST'])]
     public function deposit(int $id, Request $request, #[CurrentUser] User $user): JsonResponse
     {
-        $data = $this->decodeBody($request);
-
-        if (null === $data) {
-            return new JsonResponse(['error' => 'Invalid JSON body.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (!isset($data['amount'])) {
-            return new JsonResponse(['error' => 'Missing required field: amount.'], Response::HTTP_BAD_REQUEST);
-        }
-
-        if (!is_numeric($data['amount']) || (float) $data['amount'] <= 0) {
-            return new JsonResponse(['error' => 'Amount must be a positive number.'], Response::HTTP_BAD_REQUEST);
-        }
-
         try {
+            $payload = DepositRequest::fromArray($this->decodeBody($request));
+
             $wallet = $this->depositService->deposit(
                 $user->getIdNotNull(),
                 $id,
-                (string) $data['amount'],
+                $payload->amount,
             );
-        } catch (InvalidAmountException $e) {
+        } catch (InvalidRequestException|InvalidAmountException $e) {
             return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_BAD_REQUEST);
         } catch (WalletNotFoundException $e) {
             return new JsonResponse(['error' => $e->getMessage()], Response::HTTP_NOT_FOUND);
@@ -187,12 +150,11 @@ final class WalletController extends AbstractController
 
     /**
      * An empty body is treated as an empty payload, so the caller gets a message about
-     * the missing field; malformed JSON returns null and is reported as a bad request
-     * instead of bubbling up as a 500.
+     * the missing field rather than a complaint about the syntax.
      *
-     * @return array<string, mixed>|null
+     * @return array<string, mixed>
      */
-    private function decodeBody(Request $request): ?array
+    private function decodeBody(Request $request): array
     {
         $content = trim($request->getContent());
 
@@ -203,9 +165,13 @@ final class WalletController extends AbstractController
         try {
             $data = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
-            return null;
+            throw InvalidRequestException::malformedBody();
         }
 
-        return is_array($data) ? $data : null;
+        if (!is_array($data)) {
+            throw InvalidRequestException::malformedBody();
+        }
+
+        return $data;
     }
 }

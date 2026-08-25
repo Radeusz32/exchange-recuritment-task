@@ -419,7 +419,7 @@ class WalletControllerTest extends TestCase
 
         $this->depositService
             ->method('deposit')
-            ->willThrowException(InvalidAmountException::exceedsMaximum(DepositService::MAX_AMOUNT));
+            ->willThrowException(InvalidAmountException::exceedsMaximum(10000.0));
 
         $request = new Request(content: json_encode(['amount' => '99999'], JSON_THROW_ON_ERROR));
         $response = $this->controller->deposit(5, $request, $user);
@@ -427,7 +427,7 @@ class WalletControllerTest extends TestCase
         self::assertSame(400, $response->getStatusCode());
 
         $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
-        self::assertSame(sprintf('Amount cannot exceed %s.', DepositService::MAX_AMOUNT), $data['error']);
+        self::assertSame('Amount cannot exceed 10000.', $data['error']);
     }
 
     /**

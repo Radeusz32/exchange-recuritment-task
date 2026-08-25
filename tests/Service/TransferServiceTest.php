@@ -25,6 +25,8 @@ use PHPUnit\Framework\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class TransferServiceTest extends TestCase
 {
+    private const float ANTI_FRAUD_THRESHOLD_EUR = 15000.0;
+
     private WalletRepositoryInterface $walletRepository;
     private TransactionRepositoryInterface $transactionRepository;
     private ExchangeRateService $exchangeRateService;
@@ -43,6 +45,7 @@ class TransferServiceTest extends TestCase
             $this->transactionRepository,
             $this->exchangeRateService,
             $this->spreadService,
+            self::ANTI_FRAUD_THRESHOLD_EUR,
         );
     }
 

@@ -1,4 +1,7 @@
 parameters:
+  # Business rules the owner may want to change without touching the code.
+  app.max_deposit_amount: 10000.0
+  app.anti_fraud_threshold_eur: 15000.0
 
 services:
   _defaults:
@@ -6,6 +9,8 @@ services:
     autoconfigure: true
     bind:
       bool $debug: '%kernel.debug%'
+      float $maxDepositAmount: '%app.max_deposit_amount%'
+      float $antiFraudThresholdEur: '%app.anti_fraud_threshold_eur%'
 
   App\:
     resource: '../src/'

@@ -16,14 +16,13 @@ use App\Repository\WalletRepositoryInterface;
 
 readonly class TransferService
 {
-    /** Transfers worth more than this amount in EUR must be approved manually. */
-    public const float ANTI_FRAUD_THRESHOLD_EUR = 15_000.0;
-
     public function __construct(
         private WalletRepositoryInterface $walletRepository,
         private TransactionRepositoryInterface $transactionRepository,
         private ExchangeRateService $exchangeRateService,
         private SpreadService $spreadService,
+        /** Transfers worth more than this amount in EUR must be approved manually. */
+        private float $antiFraudThresholdEur,
     ) {
     }
 
@@ -102,6 +101,6 @@ readonly class TransferService
     {
         $amountInEur = $amount * $this->exchangeRateService->getExchangeRateBetween($currency, Currency::EUR);
 
-        return $amountInEur > self::ANTI_FRAUD_THRESHOLD_EUR;
+        return $amountInEur > $this->antiFraudThresholdEur;
     }
 }
