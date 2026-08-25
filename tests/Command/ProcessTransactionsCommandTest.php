@@ -9,6 +9,7 @@ use App\Entity\Transaction;
 use App\Entity\Wallet;
 use App\Enum\Currency;
 use App\Enum\TransactionStatus;
+use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\CompanyWalletRepositoryInterface;
 use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
@@ -37,6 +38,7 @@ class ProcessTransactionsCommandTest extends TestCase
                 $this->walletRepository,
                 $this->transactionRepository,
                 $this->createMock(CompanyWalletRepositoryInterface::class),
+                $this->atomicOperationRunner(),
             ),
         );
 
@@ -117,6 +119,17 @@ class ProcessTransactionsCommandTest extends TestCase
 
         self::assertSame(TransactionStatus::COMPLETED, $pending->getStatus());
         self::assertSame(TransactionStatus::FRAUD_REVIEW, $fraudReview->getStatus());
+    }
+
+    /** Runs the settlement inline, the way a database transaction would. */
+    private function atomicOperationRunner(): AtomicOperationRunnerInterface
+    {
+        $runner = $this->createMock(AtomicOperationRunnerInterface::class);
+        $runner
+            ->method('run')
+            ->willReturnCallback(static fn (callable $operation): mixed => $operation());
+
+        return $runner;
     }
 
     /**

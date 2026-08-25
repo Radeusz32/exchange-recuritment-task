@@ -6,6 +6,7 @@ namespace App\Service;
 
 use App\Entity\Transaction;
 use App\Enum\TransactionStatus;
+use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\CompanyWalletRepositoryInterface;
 use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
@@ -17,6 +18,7 @@ final readonly class TransactionProcessorService
         private WalletRepositoryInterface $walletRepository,
         private TransactionRepositoryInterface $transactionRepository,
         private CompanyWalletRepositoryInterface $companyWalletRepository,
+        private AtomicOperationRunnerInterface $atomicOperationRunner,
     ) {
     }
 
@@ -26,6 +28,16 @@ final readonly class TransactionProcessorService
             return;
         }
 
+        // Settling a transaction means four writes: debit, credit, the company's spread
+        // and the new status. A failure in between would leave money taken from one
+        // wallet and never handed to the other, so they all go in or none of them does.
+        $this->atomicOperationRunner->run(function () use ($transaction): void {
+            $this->settle($transaction);
+        });
+    }
+
+    private function settle(Transaction $transaction): void
+    {
         $fromWallet = $this->walletRepository->findById($transaction->getFromWalletId());
         $toWallet = $this->walletRepository->findById($transaction->getToWalletId());
 

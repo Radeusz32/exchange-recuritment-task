@@ -8,12 +8,14 @@ use App\Entity\Transaction;
 use App\Entity\Wallet;
 use App\Enum\Currency;
 use App\Enum\TransactionStatus;
+use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\CompanyWalletRepositoryInterface;
 use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\TransactionProcessorService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 #[AllowMockObjectsWithoutExpectations]
 class TransactionProcessorServiceTest extends TestCase
@@ -21,6 +23,7 @@ class TransactionProcessorServiceTest extends TestCase
     private WalletRepositoryInterface $walletRepository;
     private TransactionRepositoryInterface $transactionRepository;
     private CompanyWalletRepositoryInterface $companyWalletRepository;
+    private AtomicOperationRunnerInterface $atomicOperationRunner;
     private TransactionProcessorService $transactionProcessorService;
 
     protected function setUp(): void
@@ -29,11 +32,112 @@ class TransactionProcessorServiceTest extends TestCase
         $this->transactionRepository = $this->createMock(TransactionRepositoryInterface::class);
         $this->companyWalletRepository = $this->createMock(CompanyWalletRepositoryInterface::class);
 
+        $this->atomicOperationRunner = $this->createMock(AtomicOperationRunnerInterface::class);
+        $this->atomicOperationRunner
+            ->method('run')
+            ->willReturnCallback(static fn (callable $operation): mixed => $operation());
+
         $this->transactionProcessorService = new TransactionProcessorService(
             $this->walletRepository,
             $this->transactionRepository,
             $this->companyWalletRepository,
+            $this->atomicOperationRunner,
         );
+    }
+
+    public function testSettlementRunsAsASingleAtomicOperation(): void
+    {
+        $fromWallet = Wallet::create(1, Currency::PLN);
+        $fromWallet->setBalance(500.0);
+
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, Wallet::create(1, Currency::EUR)],
+            ]);
+
+        // Every write of the settlement has to happen inside the atomic operation.
+        $writesOutsideTheOperation = 0;
+        $insideOperation = false;
+
+        $this->atomicOperationRunner = $this->createMock(AtomicOperationRunnerInterface::class);
+        $this->atomicOperationRunner
+            ->expects(self::once())
+            ->method('run')
+            ->willReturnCallback(static function (callable $operation) use (&$insideOperation): mixed {
+                $insideOperation = true;
+                $result = $operation();
+                $insideOperation = false;
+
+                return $result;
+            });
+
+        $countWrite = static function () use (&$insideOperation, &$writesOutsideTheOperation): void {
+            if (!$insideOperation) {
+                ++$writesOutsideTheOperation;
+            }
+        };
+
+        $this->walletRepository->method('save')->willReturnCallback($countWrite);
+        $this->transactionRepository->method('save')->willReturnCallback($countWrite);
+        $this->companyWalletRepository->method('addToBalance')->willReturnCallback($countWrite);
+
+        new TransactionProcessorService(
+            $this->walletRepository,
+            $this->transactionRepository,
+            $this->companyWalletRepository,
+            $this->atomicOperationRunner,
+        )->complete($transaction);
+
+        self::assertSame(0, $writesOutsideTheOperation);
+        self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
+    }
+
+    public function testAFailedSettlementIsRolledBackAsAWhole(): void
+    {
+        $fromWallet = Wallet::create(1, Currency::PLN);
+        $fromWallet->setBalance(500.0);
+
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, Wallet::create(1, Currency::EUR)],
+            ]);
+
+        // Booking the spread blows up midway through the settlement.
+        $this->companyWalletRepository
+            ->method('addToBalance')
+            ->willThrowException(new RuntimeException('database is gone'));
+
+        // A real runner rolls the whole operation back and rethrows.
+        $this->atomicOperationRunner = $this->createMock(AtomicOperationRunnerInterface::class);
+        $this->atomicOperationRunner
+            ->method('run')
+            ->willReturnCallback(static fn (callable $operation): mixed => $operation());
+
+        $service = new TransactionProcessorService(
+            $this->walletRepository,
+            $this->transactionRepository,
+            $this->companyWalletRepository,
+            $this->atomicOperationRunner,
+        );
+
+        try {
+            $service->complete($transaction);
+            self::fail('The failure should have been propagated to the caller.');
+        } catch (RuntimeException $e) {
+            self::assertSame('database is gone', $e->getMessage());
+        }
+
+        // The status must not be advanced when the settlement did not go through,
+        // so the transaction is picked up again by the next run.
+        self::assertSame(TransactionStatus::PENDING, $transaction->getStatus());
     }
 
     public function testCompleteUpdatesWalletBalancesAndSetsCompletedStatus(): void
