@@ -43,7 +43,7 @@ final class CreateUserCommand extends Command
         $this->userRepository->save($user);
 
         $token = UserToken::create(
-            userId: $user->getId(),
+            userId: $user->getIdNotNull(),
             expiresAt: new DateTimeImmutable('+1 year'),
         );
 

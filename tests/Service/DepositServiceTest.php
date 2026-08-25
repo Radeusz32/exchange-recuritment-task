@@ -6,6 +6,7 @@ namespace App\Tests\Service;
 
 use App\Entity\Wallet;
 use App\Enum\Currency;
+use App\Exception\InvalidAmountException;
 use App\Exception\WalletBlockedException;
 use App\Exception\WalletNotFoundException;
 use App\Repository\WalletRepositoryInterface;
@@ -60,6 +61,39 @@ class DepositServiceTest extends TestCase
         $this->depositService->deposit($userId, 1, '300.00');
 
         self::assertSame(500.0, $wallet->getBalance());
+    }
+
+    public function testDepositThrowsWhenAmountIsNotPositive(): void
+    {
+        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('save');
+
+        $this->expectException(InvalidAmountException::class);
+        $this->expectExceptionMessage('Amount must be a positive number.');
+
+        $this->depositService->deposit(1, 1, '-100.00');
+    }
+
+    public function testDepositThrowsWhenAmountExceedsMaximum(): void
+    {
+        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('save');
+
+        $this->expectException(InvalidAmountException::class);
+        $this->expectExceptionMessage('Amount cannot exceed 10000.');
+
+        $this->depositService->deposit(1, 1, '10000.01');
+    }
+
+    public function testDepositAcceptsTheMaximumAmount(): void
+    {
+        $wallet = Wallet::create(1, Currency::PLN);
+
+        $this->walletRepository->method('findById')->willReturn($wallet);
+
+        $this->depositService->deposit(1, 1, (string) DepositService::MAX_AMOUNT);
+
+        self::assertSame(DepositService::MAX_AMOUNT, $wallet->getBalance());
     }
 
     public function testDepositThrowsWhenWalletNotFound(): void

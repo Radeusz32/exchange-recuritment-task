@@ -7,6 +7,7 @@ namespace App\Service;
 use App\Entity\Transaction;
 use App\Enum\Currency;
 use App\Exception\InsufficientFundsException;
+use App\Exception\InvalidAmountException;
 use App\Exception\SameWalletTransferException;
 use App\Exception\WalletBlockedException;
 use App\Exception\WalletNotFoundException;
@@ -32,6 +33,10 @@ readonly class TransferService
         int $toWalletId,
         string $fromAmount,
     ): Transaction {
+        if ((float) $fromAmount <= 0) {
+            throw InvalidAmountException::notPositive();
+        }
+
         if ($fromWalletId === $toWalletId) {
             throw new SameWalletTransferException($fromWalletId);
         }

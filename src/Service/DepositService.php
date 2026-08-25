@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Wallet;
+use App\Exception\InvalidAmountException;
 use App\Exception\WalletBlockedException;
 use App\Exception\WalletNotFoundException;
 use App\Repository\WalletRepositoryInterface;
@@ -21,6 +22,16 @@ readonly class DepositService
 
     public function deposit(int $userId, int $walletId, string $amount): Wallet
     {
+        // Enforced here rather than only in the controller, so the limit holds
+        // for every caller of the service.
+        if ((float) $amount <= 0) {
+            throw InvalidAmountException::notPositive();
+        }
+
+        if ((float) $amount > self::MAX_AMOUNT) {
+            throw InvalidAmountException::exceedsMaximum(self::MAX_AMOUNT);
+        }
+
         $wallet = $this->walletRepository->findById($walletId);
         if (null === $wallet || $wallet->getUserId() !== $userId) {
             throw new WalletNotFoundException($walletId);

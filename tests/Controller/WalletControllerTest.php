@@ -11,6 +11,7 @@ use App\Entity\Wallet;
 use App\Enum\Currency;
 use App\Enum\TransactionStatus;
 use App\Exception\InsufficientFundsException;
+use App\Exception\InvalidAmountException;
 use App\Exception\SameWalletTransferException;
 use App\Exception\WalletAlreadyExistsException;
 use App\Exception\WalletBlockedException;
@@ -402,6 +403,10 @@ class WalletControllerTest extends TestCase
     {
         $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
 
+        $this->depositService
+            ->method('deposit')
+            ->willThrowException(InvalidAmountException::exceedsMaximum(DepositService::MAX_AMOUNT));
+
         $request = new Request(content: json_encode(['amount' => '99999'], JSON_THROW_ON_ERROR));
         $response = $this->controller->deposit(5, $request, $user);
 
@@ -409,6 +414,75 @@ class WalletControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame(sprintf('Amount cannot exceed %s.', DepositService::MAX_AMOUNT), $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testDepositReturnsBadRequestForMalformedJson(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->depositService->expects(self::never())->method('deposit');
+
+        $request = new Request(content: '{"amount": ');
+        $response = $this->controller->deposit(5, $request, $user);
+
+        self::assertSame(400, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Invalid JSON body.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testCreateReturnsBadRequestForMalformedJson(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->walletService->expects(self::never())->method('createWallet');
+
+        $request = new Request(content: 'not json at all');
+        $response = $this->controller->create($request, $user);
+
+        self::assertSame(400, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Invalid JSON body.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testTransferReturnsBadRequestForMalformedJson(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transferService->expects(self::never())->method('transfer');
+
+        $request = new Request(content: '{"fromWalletId": 1,}');
+        $response = $this->controller->transfer($request, $user);
+
+        self::assertSame(400, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Invalid JSON body.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testEmptyBodyIsReportedAsMissingField(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $response = $this->controller->create(new Request(), $user);
+
+        self::assertSame(400, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Missing required field: currency.', $data['error']);
     }
 
     /**

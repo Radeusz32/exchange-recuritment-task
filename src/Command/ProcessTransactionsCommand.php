@@ -46,6 +46,18 @@ final class ProcessTransactionsCommand extends Command
             }
         }
 
+        // Fraud review is a manual decision: without someone to answer the question,
+        // SymfonyStyle would silently fall back to the default answer and approve
+        // every flagged transaction on its own.
+        if ([] !== $fraudReview && !$input->isInteractive()) {
+            $io->warning(sprintf(
+                '%d transaction(s) awaiting fraud review were skipped — run the command interactively to approve or reject them.',
+                count($fraudReview),
+            ));
+
+            return Command::SUCCESS;
+        }
+
         foreach ($fraudReview as $transaction) {
             $io->section(sprintf('Fraud review — Transaction #%d', $transaction->getId()));
             $io->definitionList(
@@ -57,7 +69,7 @@ final class ProcessTransactionsCommand extends Command
                 ['Created at' => $transaction->getCreatedAt()->format('Y-m-d H:i:s')],
             );
 
-            $approved = $io->confirm('Approve this transaction?');
+            $approved = $io->confirm('Approve this transaction?', false);
 
             if ($approved) {
                 $this->transactionProcessorService->complete($transaction);
