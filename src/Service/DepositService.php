@@ -8,6 +8,7 @@ use App\Entity\Wallet;
 use App\Exception\InvalidAmountException;
 use App\Exception\WalletBlockedException;
 use App\Exception\WalletNotFoundException;
+use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\WalletRepositoryInterface;
 use DateTimeImmutable;
 
@@ -17,6 +18,7 @@ readonly class DepositService
 
     public function __construct(
         private WalletRepositoryInterface $walletRepository,
+        private AtomicOperationRunnerInterface $atomicOperationRunner,
     ) {
     }
 
@@ -32,19 +34,23 @@ readonly class DepositService
             throw InvalidAmountException::exceedsMaximum(self::MAX_AMOUNT);
         }
 
-        $wallet = $this->walletRepository->findById($walletId);
-        if (null === $wallet || $wallet->getUserId() !== $userId) {
-            throw new WalletNotFoundException($walletId);
-        }
+        // Locking the wallet inside a transaction keeps two deposits landing at the same
+        // time from reading the same balance and one of them overwriting the other.
+        return $this->atomicOperationRunner->run(function () use ($userId, $walletId, $amount): Wallet {
+            $wallet = $this->walletRepository->findByIdForUpdate($walletId);
+            if (null === $wallet || $wallet->getUserId() !== $userId) {
+                throw new WalletNotFoundException($walletId);
+            }
 
-        if ($wallet->isBlocked()) {
-            throw new WalletBlockedException($walletId);
-        }
+            if ($wallet->isBlocked()) {
+                throw new WalletBlockedException($walletId);
+            }
 
-        $wallet->setBalance($wallet->getBalance() + (float) $amount);
-        $wallet->setLastActivityAt(new DateTimeImmutable());
-        $this->walletRepository->save($wallet);
+            $wallet->setBalance($wallet->getBalance() + (float) $amount);
+            $wallet->setLastActivityAt(new DateTimeImmutable());
+            $this->walletRepository->save($wallet);
 
-        return $wallet;
+            return $wallet;
+        });
     }
 }

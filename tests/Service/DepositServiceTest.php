@@ -9,6 +9,7 @@ use App\Enum\Currency;
 use App\Exception\InvalidAmountException;
 use App\Exception\WalletBlockedException;
 use App\Exception\WalletNotFoundException;
+use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\DepositService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -23,7 +24,13 @@ class DepositServiceTest extends TestCase
     protected function setUp(): void
     {
         $this->walletRepository = $this->createMock(WalletRepositoryInterface::class);
-        $this->depositService = new DepositService($this->walletRepository);
+
+        $atomicOperationRunner = $this->createMock(AtomicOperationRunnerInterface::class);
+        $atomicOperationRunner
+            ->method('run')
+            ->willReturnCallback(static fn (callable $operation): mixed => $operation());
+
+        $this->depositService = new DepositService($this->walletRepository, $atomicOperationRunner);
     }
 
     public function testDepositSuccessfully(): void
@@ -33,7 +40,7 @@ class DepositServiceTest extends TestCase
 
         $this->walletRepository
             ->expects(self::once())
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->with(1)
             ->willReturn($wallet);
 
@@ -55,7 +62,7 @@ class DepositServiceTest extends TestCase
         $wallet->setBalance(200.0);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturn($wallet);
 
         $this->depositService->deposit($userId, 1, '300.00');
@@ -63,9 +70,34 @@ class DepositServiceTest extends TestCase
         self::assertSame(500.0, $wallet->getBalance());
     }
 
+    public function testDepositLocksTheWalletInsideAnAtomicOperation(): void
+    {
+        $wallet = Wallet::create(1, Currency::PLN);
+        $wallet->setBalance(200.0);
+
+        $runner = $this->createMock(AtomicOperationRunnerInterface::class);
+        $runner
+            ->expects(self::once())
+            ->method('run')
+            ->willReturnCallback(static fn (callable $operation): mixed => $operation());
+
+        $this->walletRepository
+            ->expects(self::once())
+            ->method('findByIdForUpdate')
+            ->with(1)
+            ->willReturn($wallet);
+
+        // Reading the balance without a lock is what makes concurrent deposits lose money.
+        $this->walletRepository->expects(self::never())->method('findById');
+
+        $result = new DepositService($this->walletRepository, $runner)->deposit(1, 1, '300.00');
+
+        self::assertSame(500.0, $result->getBalance());
+    }
+
     public function testDepositThrowsWhenAmountIsNotPositive(): void
     {
-        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('findByIdForUpdate');
         $this->walletRepository->expects(self::never())->method('save');
 
         $this->expectException(InvalidAmountException::class);
@@ -76,7 +108,7 @@ class DepositServiceTest extends TestCase
 
     public function testDepositThrowsWhenAmountExceedsMaximum(): void
     {
-        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('findByIdForUpdate');
         $this->walletRepository->expects(self::never())->method('save');
 
         $this->expectException(InvalidAmountException::class);
@@ -89,7 +121,7 @@ class DepositServiceTest extends TestCase
     {
         $wallet = Wallet::create(1, Currency::PLN);
 
-        $this->walletRepository->method('findById')->willReturn($wallet);
+        $this->walletRepository->method('findByIdForUpdate')->willReturn($wallet);
 
         $this->depositService->deposit(1, 1, (string) DepositService::MAX_AMOUNT);
 
@@ -100,7 +132,7 @@ class DepositServiceTest extends TestCase
     {
         $this->walletRepository
             ->expects(self::once())
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->with(99)
             ->willReturn(null);
 
@@ -118,7 +150,7 @@ class DepositServiceTest extends TestCase
 
         $this->walletRepository
             ->expects(self::once())
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->with(1)
             ->willReturn($wallet);
 
@@ -138,7 +170,7 @@ class DepositServiceTest extends TestCase
 
         $this->walletRepository
             ->expects(self::once())
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->with(1)
             ->willReturn($wallet);
 

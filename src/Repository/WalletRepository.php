@@ -43,6 +43,33 @@ readonly class WalletRepository implements WalletRepositoryInterface
     }
 
     /**
+     * Reads the wallet and holds a lock on its row until the surrounding database
+     * transaction ends, so that a balance read here cannot be changed by anyone else
+     * before it is written back. Only meaningful inside a transaction.
+     *
+     * @throws Exception
+     */
+    public function findByIdForUpdate(int $id): ?Wallet
+    {
+        $qb = $this->connection->createQueryBuilder();
+
+        $qb
+            ->select('*')
+            ->from(self::TABLE_NAME)
+            ->where('id = :id')
+            ->andWhere('deleted_at IS NULL')
+            ->forUpdate();
+
+        $row = $this->connection->fetchAssociative($qb->getSQL(), ['id' => $id]);
+
+        if (!$row) {
+            return null;
+        }
+
+        return $this->buildEntity($row);
+    }
+
+    /**
      * @return Wallet[]
      *
      * @throws Exception

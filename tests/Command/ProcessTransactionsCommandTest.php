@@ -154,7 +154,7 @@ class ProcessTransactionsCommandTest extends TestCase
         $toWallet = Wallet::create(1, Currency::EUR);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, $toWallet],

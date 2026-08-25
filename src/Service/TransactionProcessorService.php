@@ -38,8 +38,10 @@ final readonly class TransactionProcessorService
 
     private function settle(Transaction $transaction): void
     {
-        $fromWallet = $this->walletRepository->findById($transaction->getFromWalletId());
-        $toWallet = $this->walletRepository->findById($transaction->getToWalletId());
+        $wallets = $this->lockWallets($transaction->getFromWalletId(), $transaction->getToWalletId());
+
+        $fromWallet = $wallets[$transaction->getFromWalletId()];
+        $toWallet = $wallets[$transaction->getToWalletId()];
 
         if (null === $fromWallet || null === $toWallet) {
             $this->reject($transaction);
@@ -97,6 +99,29 @@ final readonly class TransactionProcessorService
 
         // No wallet is touched: a rejected transfer never moved any funds in the first place.
         $this->transactionRepository->save($transaction);
+    }
+
+    /**
+     * Locks both wallets before their balances are read, so a concurrent settlement or
+     * deposit cannot slip in between the read and the write and have its change lost.
+     *
+     * The wallets are locked in a fixed order (by id), otherwise two opposite transfers
+     * running at the same time would each hold what the other one waits for.
+     *
+     * @return array<int, ?Wallet>
+     */
+    private function lockWallets(int $fromWalletId, int $toWalletId): array
+    {
+        $walletIds = [$fromWalletId, $toWalletId];
+        sort($walletIds);
+
+        $wallets = [];
+
+        foreach ($walletIds as $walletId) {
+            $wallets[$walletId] = $this->walletRepository->findByIdForUpdate($walletId);
+        }
+
+        return $wallets;
     }
 
     /**

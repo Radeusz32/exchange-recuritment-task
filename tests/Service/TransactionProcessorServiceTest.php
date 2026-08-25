@@ -53,7 +53,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, Wallet::create(1, Currency::EUR)],
@@ -96,6 +96,64 @@ class TransactionProcessorServiceTest extends TestCase
         self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
     }
 
+    /**
+     * Two opposite transfers settled at the same time would deadlock if each locked its
+     * own source wallet first, so the locks are always taken in the same order.
+     */
+    public function testWalletsAreLockedInAFixedOrderRegardlessOfTransferDirection(): void
+    {
+        $lockedInOrder = [];
+
+        $this->walletRepository
+            ->method('findByIdForUpdate')
+            ->willReturnCallback(static function (int $walletId) use (&$lockedInOrder): Wallet {
+                $lockedInOrder[] = $walletId;
+
+                $wallet = Wallet::create(1, 2 === $walletId ? Currency::PLN : Currency::EUR);
+                $wallet->setBalance(500.0);
+
+                return $wallet;
+            });
+
+        // Transfer runs from the higher id to the lower one.
+        $transaction = Transaction::create(
+            fromWalletId: 2,
+            toWalletId: 1,
+            fromAmount: '100.0000',
+            toAmount: '25.0000',
+            fromCurrency: Currency::PLN,
+            toCurrency: Currency::EUR,
+            spread: '0.5000',
+            exchangeRate: '0.250000',
+            requiresAntiFraudCheck: false,
+        );
+
+        $this->transactionProcessorService->complete($transaction);
+
+        self::assertSame([1, 2], $lockedInOrder);
+        self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
+    }
+
+    public function testSettlementNeverReadsWalletsWithoutLockingThem(): void
+    {
+        $fromWallet = Wallet::create(1, Currency::PLN);
+        $fromWallet->setBalance(500.0);
+
+        $this->walletRepository
+            ->method('findByIdForUpdate')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, Wallet::create(1, Currency::EUR)],
+            ]);
+
+        // An unlocked read would let a concurrent write slip in before the balance is saved.
+        $this->walletRepository->expects(self::never())->method('findById');
+
+        $this->transactionProcessorService->complete($this->makeTransaction(requiresAntiFraudCheck: false));
+
+        self::assertSame(400.0, $fromWallet->getBalance());
+    }
+
     public function testAFailedSettlementIsRolledBackAsAWhole(): void
     {
         $fromWallet = Wallet::create(1, Currency::PLN);
@@ -104,7 +162,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, Wallet::create(1, Currency::EUR)],
@@ -151,7 +209,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, $toWallet],
@@ -187,7 +245,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: true);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, $toWallet],
@@ -204,7 +262,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, null],
                 [2, Wallet::create(1, Currency::EUR)],
@@ -225,7 +283,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, null],
@@ -248,7 +306,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, $toWallet],
@@ -281,7 +339,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, null],
                 [2, Wallet::create(1, Currency::EUR)],
@@ -304,7 +362,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, $toWallet],
@@ -330,7 +388,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
 
         $this->walletRepository
-            ->method('findById')
+            ->method('findByIdForUpdate')
             ->willReturnMap([
                 [1, $fromWallet],
                 [2, $toWallet],
@@ -354,7 +412,7 @@ class TransactionProcessorServiceTest extends TestCase
             ->with($transaction);
 
         // A rejected transfer never moved any funds, so no wallet may be read or written.
-        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('findByIdForUpdate');
         $this->walletRepository->expects(self::never())->method('save');
 
         $this->transactionProcessorService->reject($transaction);
@@ -378,7 +436,7 @@ class TransactionProcessorServiceTest extends TestCase
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
         $transaction->setStatus(TransactionStatus::COMPLETED);
 
-        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('findByIdForUpdate');
         $this->walletRepository->expects(self::never())->method('save');
         $this->transactionRepository->expects(self::never())->method('save');
 
