@@ -37,7 +37,11 @@ A transfer is recorded first and settled later — **no balance changes when the
    the client keeps the money in the source wallet.
 
 The funds are re-checked at settlement time, so a transaction is rejected instead of overdrawing the wallet if the money
-was spent by another pending transfer in the meantime, or if a wallet has been blocked or deleted.
+was spent by another pending transfer in the meantime, or if a wallet has been blocked or deleted. Both wallets are
+locked for the duration of the settlement, and all of its writes — both balances, the company's spread and the new
+status — are committed together or not at all.
+
+The client follows the outcome through `GET /api/wallets/transactions`.
 
 > **Note:** approving fraud reviews needs a terminal — run the command with `docker exec -it`. Without one, flagged
 > transactions are skipped with a warning and wait for the next interactive run, rather than being decided by nobody.
@@ -115,6 +119,7 @@ All endpoints require Bearer token authentication. Obtain a token with `app:crea
 | `POST`   | `/api/wallets`              | Create a new wallet. Body: `{ "currency": "PLN" }`. Supported currencies: `PLN`, `EUR`, `USD`, `GBP`, `JPY`, `CHF`, `HUF`. Returns `409` if a wallet for that currency already exists. A wallet deleted earlier is restored. |
 | `POST`   | `/api/wallets/{id}/deposit` | Deposit funds into a wallet. Body: `{ "amount": "500.00" }`. Maximum single deposit: `10000`. Returns `422` if the wallet is blocked.                                                  |
 | `POST`   | `/api/wallets/transfer`     | Record a transfer between two wallets of the authenticated user (currency exchange supported). Body: `{ "fromWalletId": 1, "toWalletId": 2, "amount": "100.00" }`. Returns `422` if the wallets are the same, one of them is blocked, or the balance is too low. |
+| `GET`    | `/api/wallets/transactions` | Transactions of all the authenticated user's wallets, newest first (100 most recent). Narrow them down with `?walletId=1`. This is how a client checks whether a recorded transfer ended up `completed` or `rejected`. |
 | `DELETE` | `/api/wallets/{id}`         | Delete a wallet of the authenticated user. Returns `204` on success, `409` if the wallet still holds funds or has transactions awaiting processing.                                     |
 
 A wallet is deleted softly — transactions keep referencing it, so the history stays intact — and stops showing up

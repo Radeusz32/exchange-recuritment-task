@@ -18,6 +18,7 @@ use App\Exception\WalletBlockedException;
 use App\Exception\WalletHasPendingTransactionsException;
 use App\Exception\WalletNotEmptyException;
 use App\Exception\WalletNotFoundException;
+use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\DepositService;
 use App\Service\TransferService;
@@ -35,6 +36,7 @@ class WalletControllerTest extends TestCase
     private WalletRepositoryInterface $walletRepository;
     private TransferService $transferService;
     private DepositService $depositService;
+    private TransactionRepositoryInterface $transactionRepository;
     private WalletController $controller;
 
     protected function setUp(): void
@@ -43,12 +45,14 @@ class WalletControllerTest extends TestCase
         $this->walletRepository = $this->createMock(WalletRepositoryInterface::class);
         $this->transferService = $this->createMock(TransferService::class);
         $this->depositService = $this->createMock(DepositService::class);
+        $this->transactionRepository = $this->createMock(TransactionRepositoryInterface::class);
 
         $this->controller = new WalletController(
             $this->walletService,
             $this->walletRepository,
             $this->transferService,
             $this->depositService,
+            $this->transactionRepository,
         );
     }
 
@@ -538,6 +542,65 @@ class WalletControllerTest extends TestCase
     /**
      * @throws Throwable
      */
+    public function testTransactionsReturnsTheUsersHistory(): void
+    {
+        $user = new User(7, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transactionRepository
+            ->expects(self::once())
+            ->method('findByUserId')
+            ->with(7, null)
+            ->willReturn([$this->makeTransaction(1, TransactionStatus::COMPLETED), $this->makeTransaction(2, TransactionStatus::FRAUD_REVIEW)]);
+
+        $response = $this->controller->transactions(new Request(), $user);
+
+        self::assertSame(200, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertCount(2, $data);
+        self::assertSame([1, 2], array_column($data, 'id'));
+        self::assertSame(['completed', 'fraud_review'], array_column($data, 'status'));
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testTransactionsCanBeNarrowedDownToASingleWallet(): void
+    {
+        $user = new User(7, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transactionRepository
+            ->expects(self::once())
+            ->method('findByUserId')
+            ->with(7, 5)
+            ->willReturn([]);
+
+        $response = $this->controller->transactions(new Request(query: ['walletId' => '5']), $user);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame('[]', $response->getContent());
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testTransactionsRejectsANonNumericWalletId(): void
+    {
+        $user = new User(7, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transactionRepository->expects(self::never())->method('findByUserId');
+
+        $response = $this->controller->transactions(new Request(query: ['walletId' => 'abc']), $user);
+
+        self::assertSame(400, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('walletId must be a positive integer.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
     public function testDeleteWalletReturnsNoContent(): void
     {
         $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
@@ -608,5 +671,24 @@ class WalletControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('Wallet 5 has transactions awaiting processing and cannot be deleted.', $data['error']);
+    }
+
+    private function makeTransaction(int $id, TransactionStatus $status): Transaction
+    {
+        return new Transaction(
+            id: $id,
+            fromWalletId: 1,
+            toWalletId: 2,
+            fromAmount: '100.0000',
+            toAmount: '25.1234',
+            fromCurrency: Currency::PLN,
+            toCurrency: Currency::EUR,
+            spread: '0.1260',
+            exchangeRate: '0.250000',
+            status: $status,
+            requiresAntiFraudCheck: TransactionStatus::FRAUD_REVIEW === $status,
+            antiFraudCheckedAt: null,
+            createdAt: new DateTimeImmutable(),
+        );
     }
 }

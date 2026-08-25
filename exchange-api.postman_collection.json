@@ -145,6 +145,28 @@
             "description": "Records a transfer between two wallets of the authenticated user. Supports currency exchange. Both wallets must belong to the authenticated user, must differ, must not be blocked, and the source wallet must hold the amount. No funds move yet: the transaction is created as `pending`, or as `fraud_review` when the transfer is worth more than 15 000 EUR, and is settled by `app:process-transactions`."
           },
           "response": []
+        },
+        {
+          "name": "List Transactions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wallets/transactions?walletId=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "wallets", "transactions"],
+              "query": [
+                {
+                  "key": "walletId",
+                  "value": "1",
+                  "description": "Optional: only transactions involving this wallet.",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Transactions of all the authenticated user's wallets, newest first. Use it to check whether a recorded transfer was completed or rejected during settlement."
+          },
+          "response": []
         }
       ]
     }

@@ -16,6 +16,7 @@ use App\Exception\WalletBlockedException;
 use App\Exception\WalletHasPendingTransactionsException;
 use App\Exception\WalletNotEmptyException;
 use App\Exception\WalletNotFoundException;
+use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\DepositService;
 use App\Service\TransferService;
@@ -37,6 +38,7 @@ final class WalletController extends AbstractController
         private readonly WalletRepositoryInterface $walletRepository,
         private readonly TransferService $transferService,
         private readonly DepositService $depositService,
+        private readonly TransactionRepositoryInterface $transactionRepository,
     ) {
     }
 
@@ -145,6 +147,28 @@ final class WalletController extends AbstractController
         }
 
         return new JsonResponse(new WalletResponse($wallet));
+    }
+
+    /**
+     * Without this the client has no way of learning what happened to a transfer:
+     * the response to POST /transfer only says it was recorded, while completion
+     * or rejection happens later, during settlement.
+     */
+    #[Route('/transactions', methods: ['GET'])]
+    public function transactions(Request $request, #[CurrentUser] User $user): JsonResponse
+    {
+        $walletId = $request->query->get('walletId');
+
+        if (null !== $walletId && !ctype_digit($walletId)) {
+            return new JsonResponse(['error' => 'walletId must be a positive integer.'], Response::HTTP_BAD_REQUEST);
+        }
+
+        $transactions = $this->transactionRepository->findByUserId(
+            $user->getIdNotNull(),
+            null !== $walletId ? (int) $walletId : null,
+        );
+
+        return new JsonResponse(array_map(static fn ($t) => new TransactionResponse($t), $transactions));
     }
 
     #[Route('/{id}', methods: ['DELETE'], requirements: ['id' => '\d+'])]

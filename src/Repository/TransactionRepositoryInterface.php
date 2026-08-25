@@ -14,6 +14,14 @@ interface TransactionRepositoryInterface
     /** @return Transaction[] */
     public function findByWalletId(int $walletId): array;
 
+    /**
+     * Transactions of every wallet the user owns, newest first, optionally narrowed
+     * down to a single wallet.
+     *
+     * @return Transaction[]
+     */
+    public function findByUserId(int $userId, ?int $walletId = null, int $limit = 100): array;
+
     /** @return Transaction[] */
     public function findByStatus(TransactionStatus $status): array;
 

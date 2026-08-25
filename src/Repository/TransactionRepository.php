@@ -63,6 +63,40 @@ readonly class TransactionRepository implements TransactionRepositoryInterface
     }
 
     /**
+     * Deleted wallets are not excluded: a client keeps the history of a wallet they
+     * removed, and the transactions of a deleted wallet are all settled anyway.
+     *
+     * @return Transaction[]
+     *
+     * @throws Exception
+     */
+    public function findByUserId(int $userId, ?int $walletId = null, int $limit = 100): array
+    {
+        $qb = $this->connection->createQueryBuilder();
+
+        $ownWallets = 'SELECT id FROM wallets WHERE user_id = :user_id';
+
+        $qb
+            ->select('*')
+            ->from(self::TABLE_NAME)
+            ->where(sprintf('from_wallet_id IN (%s) OR to_wallet_id IN (%s)', $ownWallets, $ownWallets))
+            ->orderBy('created_at', 'DESC')
+            ->addOrderBy('id', 'DESC')
+            ->setMaxResults($limit);
+
+        $parameters = ['user_id' => $userId];
+
+        if (null !== $walletId) {
+            $qb->andWhere('(from_wallet_id = :wallet_id OR to_wallet_id = :wallet_id)');
+            $parameters['wallet_id'] = $walletId;
+        }
+
+        $rows = $this->connection->fetchAllAssociative($qb->getSQL(), $parameters);
+
+        return array_map($this->buildEntity(...), $rows);
+    }
+
+    /**
      * @return Transaction[]
      *
      * @throws Exception
