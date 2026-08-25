@@ -15,6 +15,8 @@ use App\Exception\InvalidAmountException;
 use App\Exception\SameWalletTransferException;
 use App\Exception\WalletAlreadyExistsException;
 use App\Exception\WalletBlockedException;
+use App\Exception\WalletHasPendingTransactionsException;
+use App\Exception\WalletNotEmptyException;
 use App\Exception\WalletNotFoundException;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\DepositService;
@@ -523,5 +525,80 @@ class WalletControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('Wallet 5 is blocked.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testDeleteWalletReturnsNoContent(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->walletService
+            ->expects(self::once())
+            ->method('deleteWallet')
+            ->with(1, 5);
+
+        $response = $this->controller->delete(5, $user);
+
+        self::assertSame(204, $response->getStatusCode());
+        self::assertEmpty($response->getContent());
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testDeleteWalletReturnsNotFoundForAnotherUsersWallet(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->walletService
+            ->method('deleteWallet')
+            ->willThrowException(new WalletNotFoundException(5));
+
+        $response = $this->controller->delete(5, $user);
+
+        self::assertSame(404, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Wallet 5 not found.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testDeleteWalletReturnsConflictWhenItStillHoldsFunds(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->walletService
+            ->method('deleteWallet')
+            ->willThrowException(new WalletNotEmptyException(5));
+
+        $response = $this->controller->delete(5, $user);
+
+        self::assertSame(409, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Wallet 5 still holds funds and cannot be deleted.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testDeleteWalletReturnsConflictWhenTransactionsAwaitProcessing(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->walletService
+            ->method('deleteWallet')
+            ->willThrowException(new WalletHasPendingTransactionsException(5));
+
+        $response = $this->controller->delete(5, $user);
+
+        self::assertSame(409, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Wallet 5 has transactions awaiting processing and cannot be deleted.', $data['error']);
     }
 }

@@ -30,7 +30,8 @@ readonly class WalletRepository implements WalletRepositoryInterface
         $qb
             ->select('*')
             ->from(self::TABLE_NAME)
-            ->where('id = :id');
+            ->where('id = :id')
+            ->andWhere('deleted_at IS NULL');
 
         $row = $this->connection->fetchAssociative($qb->getSQL(), ['id' => $id]);
 
@@ -53,7 +54,8 @@ readonly class WalletRepository implements WalletRepositoryInterface
         $qb
             ->select('*')
             ->from(self::TABLE_NAME)
-            ->where('user_id = :user_id');
+            ->where('user_id = :user_id')
+            ->andWhere('deleted_at IS NULL');
 
         $rows = $this->connection->fetchAllAssociative($qb->getSQL(), ['user_id' => $userId]);
 
@@ -61,6 +63,9 @@ readonly class WalletRepository implements WalletRepositoryInterface
     }
 
     /**
+     * Deleted wallets are included on purpose: the (user_id, currency) pair is unique,
+     * so creating the same wallet again has to reuse - and restore - the existing row.
+     *
      * @throws Exception
      */
     public function findByUserIdAndCurrency(int $userId, Currency $currency): ?Wallet
@@ -107,6 +112,7 @@ readonly class WalletRepository implements WalletRepositoryInterface
             isBlocked: (bool) $row['is_blocked'],
             lastActivityAt: null !== $row['last_activity_at'] ? new DateTimeImmutable($row['last_activity_at']) : null,
             createdAt: new DateTimeImmutable($row['created_at']),
+            deletedAt: null !== $row['deleted_at'] ? new DateTimeImmutable($row['deleted_at']) : null,
         );
     }
 
@@ -126,6 +132,7 @@ readonly class WalletRepository implements WalletRepositoryInterface
                 'is_blocked' => ':is_blocked',
                 'last_activity_at' => ':last_activity_at',
                 'created_at' => ':created_at',
+                'deleted_at' => ':deleted_at',
             ]);
 
         $this->connection->executeQuery(
@@ -139,6 +146,7 @@ readonly class WalletRepository implements WalletRepositoryInterface
                 'created_at' => $wallet->getCreatedAt()
                     ->setTimezone(timezone: new DateTimeZone('UTC'))
                     ->format('Y-m-d H:i:s'),
+                'deleted_at' => $wallet->getDeletedAt()?->setTimezone(timezone: new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
             ]
         );
 
@@ -161,6 +169,7 @@ readonly class WalletRepository implements WalletRepositoryInterface
             ->set('balance', ':balance')
             ->set('is_blocked', ':is_blocked')
             ->set('last_activity_at', ':last_activity_at')
+            ->set('deleted_at', ':deleted_at')
             ->where('id = :id');
 
         $this->connection->executeQuery(
@@ -169,6 +178,7 @@ readonly class WalletRepository implements WalletRepositoryInterface
                 'balance' => $wallet->getBalance(),
                 'is_blocked' => (int) $wallet->isBlocked(),
                 'last_activity_at' => $wallet->getLastActivityAt()?->setTimezone(timezone: new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+                'deleted_at' => $wallet->getDeletedAt()?->setTimezone(timezone: new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
                 'id' => $wallet->getId(),
             ]
         );

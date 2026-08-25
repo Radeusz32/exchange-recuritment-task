@@ -10,6 +10,7 @@ use App\Service\TransactionProcessorService;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\StreamableInputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -49,7 +50,7 @@ final class ProcessTransactionsCommand extends Command
         // Fraud review is a manual decision: without someone to answer the question,
         // SymfonyStyle would silently fall back to the default answer and approve
         // every flagged transaction on its own.
-        if ([] !== $fraudReview && !$input->isInteractive()) {
+        if ([] !== $fraudReview && !$this->canAskQuestions($input)) {
             $io->warning(sprintf(
                 '%d transaction(s) awaiting fraud review were skipped — run the command interactively to approve or reject them.',
                 count($fraudReview),
@@ -86,5 +87,24 @@ final class ProcessTransactionsCommand extends Command
         }
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Without a terminal (`docker exec` without `-it`, cron, a pipe) the question helper
+     * reads EOF and silently returns the default answer, which would decide fraud reviews
+     * for the owner. Symfony does not detect that on its own here, so STDIN is checked
+     * directly; an input stream provided by the caller counts as answerable.
+     */
+    private function canAskQuestions(InputInterface $input): bool
+    {
+        if (!$input->isInteractive()) {
+            return false;
+        }
+
+        if ($input instanceof StreamableInputInterface && null !== $input->getStream()) {
+            return true;
+        }
+
+        return defined('STDIN') && stream_isatty(STDIN);
     }
 }

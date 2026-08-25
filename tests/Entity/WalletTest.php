@@ -48,6 +48,33 @@ class WalletTest extends TestCase
         $this->assertSame($date, $wallet->getLastActivityAt());
     }
 
+    public function testWalletIsNotDeletedWhenCreated(): void
+    {
+        $wallet = Wallet::create(userId: 1, currency: Currency::PLN);
+
+        $this->assertFalse($wallet->isDeleted());
+        $this->assertNull($wallet->getDeletedAt());
+    }
+
+    public function testDeleteMarksTheWalletAsDeleted(): void
+    {
+        $wallet = Wallet::create(userId: 1, currency: Currency::PLN);
+        $wallet->delete();
+
+        $this->assertTrue($wallet->isDeleted());
+        $this->assertNotNull($wallet->getDeletedAt());
+    }
+
+    public function testRestoreClearsTheDeletionMark(): void
+    {
+        $wallet = Wallet::create(userId: 1, currency: Currency::PLN);
+        $wallet->delete();
+        $wallet->restore();
+
+        $this->assertFalse($wallet->isDeleted());
+        $this->assertNull($wallet->getDeletedAt());
+    }
+
     public function testSetLastActivityAtWithNull(): void
     {
         $wallet = Wallet::create(userId: 1, currency: Currency::PLN);
