@@ -11,11 +11,13 @@ security:
     main:
       stateless: true
       provider: app_user_provider
+      entry_point: App\Security\JsonAuthenticationEntryPoint
       custom_authenticators:
         - App\Security\TokenAuthenticator
   access_control:
-  # - { path: ^/admin, roles: ROLE_ADMIN }
-  # - { path: ^/profile, roles: ROLE_USER }
+    # Guards the whole API in one place, so an endpoint is never left open just because
+    # its action forgot to ask for the current user.
+    - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
 
 when@test:
   security:

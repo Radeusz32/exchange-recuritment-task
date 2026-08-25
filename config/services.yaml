@@ -4,6 +4,8 @@ services:
   _defaults:
     autowire: true
     autoconfigure: true
+    bind:
+      bool $debug: '%kernel.debug%'
 
   App\:
     resource: '../src/'
