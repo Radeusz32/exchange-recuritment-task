@@ -39,49 +39,49 @@ class SpreadServiceTest extends TestCase
             'price' => 100.0,
             'fromCurrency' => Currency::USD,
             'toCurrency' => Currency::USD,
-            'expectedResult' => '0.00',
+            'expectedResult' => '0.0000',
         ];
         yield 'PLN to PLN (same currency, no conversion)' => [
             'price' => 100.0,
             'fromCurrency' => Currency::PLN,
             'toCurrency' => Currency::PLN,
-            'expectedResult' => '0.00',
+            'expectedResult' => '0.0000',
         ];
         yield 'HUF to HUF (same currency, no conversion)' => [
             'price' => 100.0,
             'fromCurrency' => Currency::HUF,
             'toCurrency' => Currency::HUF,
-            'expectedResult' => '0.00',
+            'expectedResult' => '0.0000',
         ];
         yield 'USD to EUR' => [
             'price' => 100.0,
             'fromCurrency' => Currency::USD,
             'toCurrency' => Currency::EUR,
-            'expectedResult' => '0.51',
+            'expectedResult' => '0.5128',
         ];
         yield 'GBP to CHF' => [
             'price' => 100.0,
             'fromCurrency' => Currency::GBP,
             'toCurrency' => Currency::CHF,
-            'expectedResult' => '0.61',
+            'expectedResult' => '0.6061',
         ];
         yield 'HUF to JPY' => [
             'price' => 100.0,
             'fromCurrency' => Currency::HUF,
             'toCurrency' => Currency::JPY,
-            'expectedResult' => '0.87',
+            'expectedResult' => '0.8696',
         ];
         yield 'HUF to PLN' => [
             'price' => 50.0,
             'fromCurrency' => Currency::HUF,
             'toCurrency' => Currency::PLN,
-            'expectedResult' => '0.53',
+            'expectedResult' => '0.5263',
         ];
         yield 'USD to EUR with higher price' => [
             'price' => 200.0,
             'fromCurrency' => Currency::USD,
             'toCurrency' => Currency::EUR,
-            'expectedResult' => '1.03',
+            'expectedResult' => '1.0256',
         ];
     }
 }

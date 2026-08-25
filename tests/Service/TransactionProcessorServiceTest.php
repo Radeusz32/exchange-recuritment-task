@@ -8,6 +8,7 @@ use App\Entity\Transaction;
 use App\Entity\Wallet;
 use App\Enum\Currency;
 use App\Enum\TransactionStatus;
+use App\Repository\CompanyWalletRepositoryInterface;
 use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\TransactionProcessorService;
@@ -19,16 +20,19 @@ class TransactionProcessorServiceTest extends TestCase
 {
     private WalletRepositoryInterface $walletRepository;
     private TransactionRepositoryInterface $transactionRepository;
+    private CompanyWalletRepositoryInterface $companyWalletRepository;
     private TransactionProcessorService $transactionProcessorService;
 
     protected function setUp(): void
     {
         $this->walletRepository = $this->createMock(WalletRepositoryInterface::class);
         $this->transactionRepository = $this->createMock(TransactionRepositoryInterface::class);
+        $this->companyWalletRepository = $this->createMock(CompanyWalletRepositoryInterface::class);
 
         $this->transactionProcessorService = new TransactionProcessorService(
             $this->walletRepository,
             $this->transactionRepository,
+            $this->companyWalletRepository,
         );
     }
 
@@ -124,6 +128,62 @@ class TransactionProcessorServiceTest extends TestCase
             ]);
 
         $this->walletRepository->expects(self::never())->method('save');
+
+        $this->transactionProcessorService->complete($transaction);
+
+        self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
+    }
+
+    public function testCompleteCreditsTheCompanyWalletWithTheSpread(): void
+    {
+        $fromWallet = Wallet::create(1, Currency::PLN);
+        $fromWallet->setBalance(500.0);
+
+        $toWallet = Wallet::create(1, Currency::EUR);
+
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, $toWallet],
+            ]);
+
+        // The spread is charged in the currency the client is paid in.
+        $this->companyWalletRepository
+            ->expects(self::once())
+            ->method('addToBalance')
+            ->with(Currency::EUR, '0.5000');
+
+        $this->transactionProcessorService->complete($transaction);
+
+        self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
+    }
+
+    public function testRejectDoesNotCreditTheCompanyWallet(): void
+    {
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: true);
+
+        $this->companyWalletRepository->expects(self::never())->method('addToBalance');
+
+        $this->transactionProcessorService->reject($transaction);
+
+        self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
+    }
+
+    public function testCompleteDoesNotCreditTheCompanyWalletWhenItRejects(): void
+    {
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, null],
+                [2, Wallet::create(1, Currency::EUR)],
+            ]);
+
+        $this->companyWalletRepository->expects(self::never())->method('addToBalance');
 
         $this->transactionProcessorService->complete($transaction);
 

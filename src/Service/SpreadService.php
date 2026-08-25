@@ -20,13 +20,16 @@ class SpreadService
 
     private const float BASE_SPREAD_PERCENT = 0.5;
 
+    /** Matches the DECIMAL(15,4) columns holding amounts and spreads. */
+    private const int SCALE = 4;
+
     public function calculateSpread(
         float $price,
         Currency $fromCurrency,
         Currency $toCurrency,
     ): string {
         if ($fromCurrency === $toCurrency) {
-            return number_format(0, 2, '.', '');
+            return number_format(0, self::SCALE, '.', '');
         }
 
         $fromLiquidity = self::LIQUIDITY_SCORE[$fromCurrency->value];
@@ -38,6 +41,6 @@ class SpreadService
 
         $spread = $price * ($spreadPercent / 100);
 
-        return number_format($spread, 2, '.', '');
+        return number_format($spread, self::SCALE, '.', '');
     }
 }
