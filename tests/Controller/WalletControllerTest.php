@@ -10,6 +10,8 @@ use App\Entity\User;
 use App\Entity\Wallet;
 use App\Enum\Currency;
 use App\Enum\TransactionStatus;
+use App\Exception\InsufficientFundsException;
+use App\Exception\SameWalletTransferException;
 use App\Exception\WalletAlreadyExistsException;
 use App\Exception\WalletBlockedException;
 use App\Exception\WalletNotFoundException;
@@ -267,6 +269,78 @@ class WalletControllerTest extends TestCase
 
         $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
         self::assertSame('Wallet 99 not found.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testTransferReturnsUnprocessableWhenBalanceIsTooLow(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transferService
+            ->method('transfer')
+            ->willThrowException(new InsufficientFundsException(1));
+
+        $request = new Request(content: json_encode([
+            'fromWalletId' => 1,
+            'toWalletId' => 2,
+            'amount' => '100.00',
+        ], JSON_THROW_ON_ERROR));
+        $response = $this->controller->transfer($request, $user);
+
+        self::assertSame(422, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Wallet 1 has insufficient funds.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testTransferReturnsUnprocessableWhenWalletBlocked(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transferService
+            ->method('transfer')
+            ->willThrowException(new WalletBlockedException(2));
+
+        $request = new Request(content: json_encode([
+            'fromWalletId' => 1,
+            'toWalletId' => 2,
+            'amount' => '100.00',
+        ], JSON_THROW_ON_ERROR));
+        $response = $this->controller->transfer($request, $user);
+
+        self::assertSame(422, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Wallet 2 is blocked.', $data['error']);
+    }
+
+    /**
+     * @throws Throwable
+     */
+    public function testTransferReturnsUnprocessableForTheSameWallet(): void
+    {
+        $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
+
+        $this->transferService
+            ->method('transfer')
+            ->willThrowException(new SameWalletTransferException(1));
+
+        $request = new Request(content: json_encode([
+            'fromWalletId' => 1,
+            'toWalletId' => 1,
+            'amount' => '100.00',
+        ], JSON_THROW_ON_ERROR));
+        $response = $this->controller->transfer($request, $user);
+
+        self::assertSame(422, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame('Cannot transfer funds from wallet 1 to itself.', $data['error']);
     }
 
     /**

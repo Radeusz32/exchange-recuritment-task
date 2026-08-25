@@ -130,6 +130,56 @@ class TransactionProcessorServiceTest extends TestCase
         self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
     }
 
+    public function testCompleteRejectsWhenFundsWereSpentInTheMeantime(): void
+    {
+        $fromWallet = Wallet::create(1, Currency::PLN);
+        $fromWallet->setBalance(99.0);
+
+        $toWallet = Wallet::create(1, Currency::EUR);
+
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, $toWallet],
+            ]);
+
+        $this->walletRepository->expects(self::never())->method('save');
+
+        $this->transactionProcessorService->complete($transaction);
+
+        self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
+        self::assertSame(99.0, $fromWallet->getBalance());
+        self::assertSame(0.0, $toWallet->getBalance());
+    }
+
+    public function testCompleteRejectsWhenWalletGotBlockedInTheMeantime(): void
+    {
+        $fromWallet = Wallet::create(1, Currency::PLN);
+        $fromWallet->setBalance(500.0);
+        $fromWallet->setIsBlocked(true);
+
+        $toWallet = Wallet::create(1, Currency::EUR);
+
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, $toWallet],
+            ]);
+
+        $this->walletRepository->expects(self::never())->method('save');
+
+        $this->transactionProcessorService->complete($transaction);
+
+        self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
+        self::assertSame(500.0, $fromWallet->getBalance());
+    }
+
     public function testRejectSetsRejectedStatusAndLeavesWalletsUntouched(): void
     {
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);

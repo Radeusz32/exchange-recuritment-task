@@ -33,6 +33,20 @@ final readonly class TransactionProcessorService
             return;
         }
 
+        // The wallets may have changed between the transfer request and its settlement:
+        // the funds could have been spent by another pending transfer, or a wallet blocked.
+        if ($fromWallet->isBlocked() || $toWallet->isBlocked()) {
+            $this->reject($transaction);
+
+            return;
+        }
+
+        if ((float) $transaction->getFromAmount() > $fromWallet->getBalance()) {
+            $this->reject($transaction);
+
+            return;
+        }
+
         $fromWallet->setBalance($fromWallet->getBalance() - (float) $transaction->getFromAmount());
         $fromWallet->setLastActivityAt(new DateTimeImmutable());
 
