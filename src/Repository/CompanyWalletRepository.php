@@ -66,38 +66,28 @@ readonly class CompanyWalletRepository implements CompanyWalletRepositoryInterfa
     {
         $now = new DateTimeImmutable()->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
 
-        $existing = $this->findByCurrency($currency);
+        // Deciding between INSERT and UPDATE in PHP loses the race when two settlements
+        // book earnings in a currency the company holds no wallet for yet: both would see
+        // no row and both would insert, breaking the unique key on currency. The database
+        // resolves it in a single statement instead, and the addition is done in SQL so
+        // that concurrent bookings add up rather than overwrite each other.
+        $sql = sprintf(
+            <<<'SQL'
+                INSERT INTO %s (currency, balance, created_at, updated_at)
+                VALUES (:currency, :amount, :created_at, :updated_at)
+                ON DUPLICATE KEY UPDATE
+                    balance = balance + VALUES(balance),
+                    updated_at = VALUES(updated_at)
+                SQL,
+            self::TABLE_NAME,
+        );
 
-        $qb = $this->connection->createQueryBuilder();
-        if (null === $existing) {
-            $qb
-                ->insert(self::TABLE_NAME)
-                ->values([
-                    'currency' => ':currency',
-                    'balance' => ':balance',
-                    'created_at' => ':created_at',
-                    'updated_at' => ':updated_at',
-                ]);
-
-            $this->connection->executeStatement($qb->getSQL(), [
-                'currency' => $currency->value,
-                'balance' => $amount,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
-        } else {
-            $qb
-                ->update(self::TABLE_NAME)
-                ->set('balance', 'balance + :amount')
-                ->set('updated_at', ':updated_at')
-                ->where('currency = :currency');
-
-            $this->connection->executeStatement($qb->getSQL(), [
-                'amount' => $amount,
-                'updated_at' => $now,
-                'currency' => $currency->value,
-            ]);
-        }
+        $this->connection->executeStatement($sql, [
+            'currency' => $currency->value,
+            'amount' => $amount,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
     }
 
     private function buildEntity(array $row): CompanyWallet
