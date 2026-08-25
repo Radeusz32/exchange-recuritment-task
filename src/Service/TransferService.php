@@ -45,12 +45,9 @@ readonly class TransferService
 
         $toAmountFormatted = number_format($toAmount, 4, '.', '');
 
-        $fromWallet->setBalance($fromWallet->getBalance() - (float) $fromAmount);
-        $toWallet->setBalance($toWallet->getBalance() + (float) $toAmountFormatted);
-
-        $this->walletRepository->save($fromWallet);
-        $this->walletRepository->save($toWallet);
-
+        // Funds are not moved here on purpose — a transfer only records the intent.
+        // Balances change once the transaction is completed by TransactionProcessorService,
+        // which for large amounts happens only after the anti-fraud approval.
         $transaction = Transaction::create(
             fromWalletId: $fromWalletId,
             toWalletId: $toWalletId,

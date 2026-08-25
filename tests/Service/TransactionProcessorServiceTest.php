@@ -130,25 +130,18 @@ class TransactionProcessorServiceTest extends TestCase
         self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
     }
 
-    public function testRejectSetsRejectedStatus(): void
+    public function testRejectSetsRejectedStatusAndLeavesWalletsUntouched(): void
     {
         $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
-
-        $wallet = $this->createStub(Wallet::class);
 
         $this->transactionRepository
             ->expects(self::once())
             ->method('save')
             ->with($transaction);
-        $this->walletRepository
-            ->expects($this->once())
-            ->method('findById')
-            ->with(1)
-            ->willReturn($wallet);
-        $this->walletRepository
-            ->expects($this->once())
-            ->method('save')
-            ->with($wallet);
+
+        // A rejected transfer never moved any funds, so no wallet may be read or written.
+        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('save');
 
         $this->transactionProcessorService->reject($transaction);
 
@@ -164,6 +157,32 @@ class TransactionProcessorServiceTest extends TestCase
 
         self::assertSame(TransactionStatus::REJECTED, $transaction->getStatus());
         self::assertNotNull($transaction->getAntiFraudCheckedAt());
+    }
+
+    public function testCompleteIgnoresAlreadyCompletedTransaction(): void
+    {
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+        $transaction->setStatus(TransactionStatus::COMPLETED);
+
+        $this->walletRepository->expects(self::never())->method('findById');
+        $this->walletRepository->expects(self::never())->method('save');
+        $this->transactionRepository->expects(self::never())->method('save');
+
+        $this->transactionProcessorService->complete($transaction);
+
+        self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
+    }
+
+    public function testRejectIgnoresAlreadyCompletedTransaction(): void
+    {
+        $transaction = $this->makeTransaction(requiresAntiFraudCheck: false);
+        $transaction->setStatus(TransactionStatus::COMPLETED);
+
+        $this->transactionRepository->expects(self::never())->method('save');
+
+        $this->transactionProcessorService->reject($transaction);
+
+        self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
     }
 
     private function makeTransaction(bool $requiresAntiFraudCheck): Transaction

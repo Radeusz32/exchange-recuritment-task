@@ -20,6 +20,10 @@ final readonly class TransactionProcessorService
 
     public function complete(Transaction $transaction): void
     {
+        if (!$this->isProcessable($transaction)) {
+            return;
+        }
+
         $fromWallet = $this->walletRepository->findById($transaction->getFromWalletId());
         $toWallet = $this->walletRepository->findById($transaction->getToWalletId());
 
@@ -49,12 +53,30 @@ final readonly class TransactionProcessorService
 
     public function reject(Transaction $transaction): void
     {
+        if (!$this->isProcessable($transaction)) {
+            return;
+        }
+
         $transaction->setStatus(TransactionStatus::REJECTED);
 
         if ($transaction->requiresAntiFraudCheck()) {
             $transaction->setAntiFraudCheckedAt(new DateTimeImmutable());
         }
 
+        // No wallet is touched: a rejected transfer never moved any funds in the first place.
         $this->transactionRepository->save($transaction);
+    }
+
+    /**
+     * Only transactions awaiting processing may be settled - this guards against
+     * processing the same transaction twice, which would move the funds twice.
+     */
+    private function isProcessable(Transaction $transaction): bool
+    {
+        return in_array(
+            $transaction->getStatus(),
+            [TransactionStatus::PENDING, TransactionStatus::FRAUD_REVIEW],
+            true,
+        );
     }
 }
