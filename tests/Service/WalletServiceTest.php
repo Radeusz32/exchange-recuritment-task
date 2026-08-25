@@ -18,13 +18,14 @@ use App\Service\WalletService;
 use Generator;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
 class WalletServiceTest extends TestCase
 {
-    private WalletRepositoryInterface $walletRepository;
-    private TransactionRepositoryInterface $transactionRepository;
+    private WalletRepositoryInterface&MockObject $walletRepository;
+    private TransactionRepositoryInterface&MockObject $transactionRepository;
     private WalletService $walletService;
 
     protected function setUp(): void

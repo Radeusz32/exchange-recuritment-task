@@ -15,6 +15,7 @@ use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\TransactionProcessorService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use Symfony\Component\Console\Command\Command;
@@ -23,8 +24,8 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[AllowMockObjectsWithoutExpectations]
 class ProcessTransactionsCommandTest extends TestCase
 {
-    private TransactionRepositoryInterface $transactionRepository;
-    private WalletRepositoryInterface $walletRepository;
+    private TransactionRepositoryInterface&MockObject $transactionRepository;
+    private WalletRepositoryInterface&MockObject $walletRepository;
     private CommandTester $commandTester;
 
     protected function setUp(): void

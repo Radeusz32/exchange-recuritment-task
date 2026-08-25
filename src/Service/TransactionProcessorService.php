@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Transaction;
+use App\Entity\Wallet;
 use App\Enum\TransactionStatus;
 use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\CompanyWalletRepositoryInterface;

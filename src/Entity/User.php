@@ -10,6 +10,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
 
 class User implements UserInterface
 {
+    /** @param list<string> $roles */
     public function __construct(
         private ?int $id,
         private readonly string $email,
@@ -32,11 +33,13 @@ class User implements UserInterface
         return $this->id;
     }
 
+    /** @return list<string> */
     public function getRoles(): array
     {
         return $this->roles;
     }
 
+    /** @param list<string> $roles */
     public function setRoles(array $roles): void
     {
         $this->roles = $roles;

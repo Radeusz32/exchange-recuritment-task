@@ -107,6 +107,13 @@ docker exec -it php-fpm <command>
 docker exec -it php-fpm composer tests
 ```
 
+Static analysis and the coding standard run the same way:
+
+```bash
+docker exec -it php-fpm composer phpstan   # PHPStan, level 6
+docker exec -it php-fpm composer ci        # coding standard + PHPStan + tests, as CI runs them
+```
+
 The suite contains unit tests and integration tests. The integration ones drive the real application against a separate
 `app_test` database, which they create and migrate on first run. They are skipped automatically when no database is
 reachable, so the unit tests can be run without the containers.

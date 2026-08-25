@@ -77,6 +77,7 @@ readonly class UserRepository implements UserRepositoryInterface
         }
     }
 
+    /** @param array<string, mixed> $row */
     private function buildEntity(array $row): User
     {
         return new User(

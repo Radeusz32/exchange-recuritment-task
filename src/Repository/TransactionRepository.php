@@ -127,6 +127,7 @@ readonly class TransactionRepository implements TransactionRepositoryInterface
         }
     }
 
+    /** @param array<string, mixed> $row */
     private function buildEntity(array $row): Transaction
     {
         return new Transaction(

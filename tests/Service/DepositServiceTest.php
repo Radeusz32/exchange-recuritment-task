@@ -13,6 +13,7 @@ use App\Persistence\AtomicOperationRunnerInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\DepositService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -20,7 +21,7 @@ class DepositServiceTest extends TestCase
 {
     private const float MAX_AMOUNT = 10000.0;
 
-    private WalletRepositoryInterface $walletRepository;
+    private WalletRepositoryInterface&MockObject $walletRepository;
     private DepositService $depositService;
 
     protected function setUp(): void

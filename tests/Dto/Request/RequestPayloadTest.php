@@ -59,6 +59,7 @@ class RequestPayloadTest extends TestCase
         self::assertSame('100.00', $payload->amount);
     }
 
+    /** @param array<string, mixed> $data */
     #[DataProvider('missingTransferFieldDataProvider')]
     public function testTransferRejectsAMissingField(array $data, string $expectedMessage): void
     {

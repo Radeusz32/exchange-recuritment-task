@@ -10,6 +10,7 @@ use App\Entity\UserToken;
 use App\Repository\UserRepositoryInterface;
 use App\Repository\UserTokenRepositoryInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use Symfony\Component\Console\Command\Command;
@@ -18,8 +19,8 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[AllowMockObjectsWithoutExpectations]
 class CreateUserCommandTest extends TestCase
 {
-    private UserRepositoryInterface $userRepository;
-    private UserTokenRepositoryInterface $userTokenRepository;
+    private UserRepositoryInterface&MockObject $userRepository;
+    private UserTokenRepositoryInterface&MockObject $userTokenRepository;
     private CommandTester $commandTester;
 
     protected function setUp(): void

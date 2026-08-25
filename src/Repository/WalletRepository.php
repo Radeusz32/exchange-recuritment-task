@@ -129,6 +129,7 @@ readonly class WalletRepository implements WalletRepositoryInterface
         }
     }
 
+    /** @param array<string, mixed> $row */
     private function buildEntity(array $row): Wallet
     {
         return new Wallet(

@@ -9,6 +9,7 @@ use App\Entity\CompanyWallet;
 use App\Enum\Currency;
 use App\Repository\CompanyWalletRepositoryInterface;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -16,7 +17,7 @@ use Symfony\Component\Console\Tester\CommandTester;
 #[AllowMockObjectsWithoutExpectations]
 class ShowCompanyWalletCommandTest extends TestCase
 {
-    private CompanyWalletRepositoryInterface $companyWalletRepository;
+    private CompanyWalletRepositoryInterface&MockObject $companyWalletRepository;
     private CommandTester $commandTester;
 
     protected function setUp(): void

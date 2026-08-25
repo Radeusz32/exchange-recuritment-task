@@ -77,7 +77,11 @@ abstract class IntegrationTestCase extends KernelTestCase
         return self::getContainer()->get($id);
     }
 
-    /** Sends a real request through the whole stack, security included. */
+    /**
+     * Sends a real request through the whole stack, security included.
+     *
+     * @param array<string, mixed>|null $body
+     */
     protected function http(string $method, string $uri, ?string $token = null, ?array $body = null): Response
     {
         $server = ['CONTENT_TYPE' => 'application/json'];
@@ -120,7 +124,7 @@ abstract class IntegrationTestCase extends KernelTestCase
         return [$user, $token->getToken()];
     }
 
-    /** @return array<string, mixed> */
+    /** @return array<mixed> */
     protected function jsonOf(Response $response): array
     {
         return json_decode((string) $response->getContent(), true, 512, JSON_THROW_ON_ERROR);
@@ -135,7 +139,7 @@ abstract class IntegrationTestCase extends KernelTestCase
         $connection = self::getContainer()->get('doctrine.dbal.default_connection');
         $params = $connection->getParams();
         $databaseName = $params['dbname'];
-        unset($params['dbname'], $params['path'], $params['url']);
+        unset($params['dbname']);
 
         // Connect without a database first: it may not exist yet.
         $server = DriverManager::getConnection($params);

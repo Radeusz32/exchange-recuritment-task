@@ -14,6 +14,7 @@ final readonly class TransactionResponse implements JsonSerializable
     {
     }
 
+    /** @return array<string, mixed> */
     public function jsonSerialize(): array
     {
         return [

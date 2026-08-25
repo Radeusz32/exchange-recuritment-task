@@ -20,6 +20,7 @@ use App\Service\TransferService;
 use Generator;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -27,10 +28,10 @@ class TransferServiceTest extends TestCase
 {
     private const float ANTI_FRAUD_THRESHOLD_EUR = 15000.0;
 
-    private WalletRepositoryInterface $walletRepository;
-    private TransactionRepositoryInterface $transactionRepository;
-    private ExchangeRateService $exchangeRateService;
-    private SpreadService $spreadService;
+    private WalletRepositoryInterface&MockObject $walletRepository;
+    private TransactionRepositoryInterface&MockObject $transactionRepository;
+    private ExchangeRateService&MockObject $exchangeRateService;
+    private SpreadService&MockObject $spreadService;
     private TransferService $transferService;
 
     protected function setUp(): void

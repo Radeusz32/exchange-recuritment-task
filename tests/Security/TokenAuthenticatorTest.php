@@ -11,6 +11,7 @@ use App\Repository\UserTokenRepositoryInterface;
 use App\Security\TokenAuthenticator;
 use DateTimeImmutable;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -23,8 +24,8 @@ use Symfony\Component\Security\Http\Authenticator\Passport\SelfValidatingPasspor
 #[AllowMockObjectsWithoutExpectations]
 class TokenAuthenticatorTest extends TestCase
 {
-    private UserTokenRepositoryInterface $userTokenRepository;
-    private UserRepositoryInterface $userRepository;
+    private UserTokenRepositoryInterface&MockObject $userTokenRepository;
+    private UserRepositoryInterface&MockObject $userRepository;
 
     private TokenAuthenticator $tokenAuthenticator;
 

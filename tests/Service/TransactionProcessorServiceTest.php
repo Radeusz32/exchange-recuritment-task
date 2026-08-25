@@ -14,16 +14,17 @@ use App\Repository\TransactionRepositoryInterface;
 use App\Repository\WalletRepositoryInterface;
 use App\Service\TransactionProcessorService;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 #[AllowMockObjectsWithoutExpectations]
 class TransactionProcessorServiceTest extends TestCase
 {
-    private WalletRepositoryInterface $walletRepository;
-    private TransactionRepositoryInterface $transactionRepository;
-    private CompanyWalletRepositoryInterface $companyWalletRepository;
-    private AtomicOperationRunnerInterface $atomicOperationRunner;
+    private WalletRepositoryInterface&MockObject $walletRepository;
+    private TransactionRepositoryInterface&MockObject $transactionRepository;
+    private CompanyWalletRepositoryInterface&MockObject $companyWalletRepository;
+    private AtomicOperationRunnerInterface&MockObject $atomicOperationRunner;
     private TransactionProcessorService $transactionProcessorService;
 
     protected function setUp(): void
@@ -60,30 +61,28 @@ class TransactionProcessorServiceTest extends TestCase
             ]);
 
         // Every write of the settlement has to happen inside the atomic operation.
-        $writesOutsideTheOperation = 0;
-        $insideOperation = false;
+        $phase = 'before';
+        $writePhases = [];
 
         $this->atomicOperationRunner = $this->createMock(AtomicOperationRunnerInterface::class);
         $this->atomicOperationRunner
             ->expects(self::once())
             ->method('run')
-            ->willReturnCallback(static function (callable $operation) use (&$insideOperation): mixed {
-                $insideOperation = true;
+            ->willReturnCallback(static function (callable $operation) use (&$phase): mixed {
+                $phase = 'inside';
                 $result = $operation();
-                $insideOperation = false;
+                $phase = 'after';
 
                 return $result;
             });
 
-        $countWrite = static function () use (&$insideOperation, &$writesOutsideTheOperation): void {
-            if (!$insideOperation) {
-                ++$writesOutsideTheOperation;
-            }
+        $recordWrite = static function () use (&$phase, &$writePhases): void {
+            $writePhases[] = $phase;
         };
 
-        $this->walletRepository->method('save')->willReturnCallback($countWrite);
-        $this->transactionRepository->method('save')->willReturnCallback($countWrite);
-        $this->companyWalletRepository->method('addToBalance')->willReturnCallback($countWrite);
+        $this->walletRepository->method('save')->willReturnCallback($recordWrite);
+        $this->transactionRepository->method('save')->willReturnCallback($recordWrite);
+        $this->companyWalletRepository->method('addToBalance')->willReturnCallback($recordWrite);
 
         new TransactionProcessorService(
             $this->walletRepository,
@@ -92,7 +91,8 @@ class TransactionProcessorServiceTest extends TestCase
             $this->atomicOperationRunner,
         )->complete($transaction);
 
-        self::assertSame(0, $writesOutsideTheOperation);
+        // Two balances, the company's spread and the transaction status - all inside.
+        self::assertSame(['inside', 'inside', 'inside', 'inside'], $writePhases);
         self::assertSame(TransactionStatus::COMPLETED, $transaction->getStatus());
     }
 

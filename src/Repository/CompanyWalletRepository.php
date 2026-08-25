@@ -90,6 +90,7 @@ readonly class CompanyWalletRepository implements CompanyWalletRepositoryInterfa
         ]);
     }
 
+    /** @param array<string, mixed> $row */
     private function buildEntity(array $row): CompanyWallet
     {
         return new CompanyWallet(

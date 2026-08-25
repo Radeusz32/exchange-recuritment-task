@@ -102,6 +102,7 @@ readonly class UserTokenRepository implements UserTokenRepositoryInterface
         $this->connection->executeQuery($qb->getSQL(), ['id' => $token->getId()]);
     }
 
+    /** @param array<string, mixed> $row */
     private function buildEntity(array $row): UserToken
     {
         return new UserToken(

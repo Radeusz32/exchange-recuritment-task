@@ -27,7 +27,7 @@ final class TokenAuthenticator extends AbstractAuthenticator
     ) {
     }
 
-    public function supports(Request $request): ?bool
+    public function supports(Request $request): bool
     {
         return $request->headers->has('Authorization')
             && str_starts_with($request->headers->get('Authorization', ''), 'Bearer ');
@@ -63,7 +63,7 @@ final class TokenAuthenticator extends AbstractAuthenticator
         return null;
     }
 
-    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): ?Response
+    public function onAuthenticationFailure(Request $request, AuthenticationException $exception): Response
     {
         return new JsonResponse(
             ['error' => strtr($exception->getMessageKey(), $exception->getMessageData())],
