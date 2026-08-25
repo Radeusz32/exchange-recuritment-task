@@ -59,7 +59,10 @@ class WalletControllerTest extends TestCase
     {
         $user = new User(1, 'test@example.com', ['ROLE_USER'], new DateTimeImmutable());
         $wallet1 = Wallet::create(1, Currency::PLN);
+        $wallet1->setBalance(150.5);
+
         $wallet2 = Wallet::create(1, Currency::EUR);
+        $wallet2->setBalance(20.25);
 
         $this->walletRepository
             ->expects(self::once())
@@ -70,6 +73,11 @@ class WalletControllerTest extends TestCase
         $response = $this->controller->list($user);
 
         self::assertSame(200, $response->getStatusCode());
+
+        $data = json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+        self::assertCount(2, $data);
+        self::assertSame(['PLN', 'EUR'], array_column($data, 'currency'));
+        self::assertSame([150.5, 20.25], array_column($data, 'balance'));
     }
 
     /**

@@ -7,11 +7,9 @@ namespace App\Tests\Service;
 use App\Enum\Currency;
 use App\Service\SpreadService;
 use Generator;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
-#[AllowMockObjectsWithoutExpectations]
 class SpreadServiceTest extends TestCase
 {
     private SpreadService $spreadService;
