@@ -17,7 +17,9 @@ use App\Repository\WalletRepositoryInterface;
 use App\Service\ExchangeRateService;
 use App\Service\SpreadService;
 use App\Service\TransferService;
+use Generator;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -63,10 +65,10 @@ class TransferServiceTest extends TestCase
             ]);
 
         $this->exchangeRateService
-            ->expects(self::once())
             ->method('getExchangeRateBetween')
-            ->with(Currency::PLN, Currency::EUR)
-            ->willReturn(0.25);
+            ->willReturnMap([
+                [Currency::PLN, Currency::EUR, 0.25],
+            ]);
 
         $this->spreadService
             ->expects(self::once())
@@ -96,6 +98,97 @@ class TransferServiceTest extends TestCase
         self::assertSame('1.0000', $transaction->getSpread());
         self::assertSame(Currency::PLN, $transaction->getFromCurrency());
         self::assertSame(Currency::EUR, $transaction->getToCurrency());
+    }
+
+    /**
+     * The threshold is 15 000 EUR of the transferred amount, regardless of the currencies
+     * involved. The target amount alone tells nothing: 100 EUR is ~35 900 HUF, while
+     * 16 000 EUR is only ~13 900 GBP.
+     */
+    #[DataProvider('antiFraudThresholdDataProvider')]
+    public function testAntiFraudCheckIsBasedOnTheEuroValueOfTheTransfer(
+        Currency $fromCurrency,
+        Currency $toCurrency,
+        float $rateToTarget,
+        float $rateToEur,
+        string $amount,
+        bool $expectedAntiFraudCheck,
+        TransactionStatus $expectedStatus,
+    ): void {
+        $fromWallet = Wallet::create(1, $fromCurrency);
+        $fromWallet->setBalance(10_000_000.0);
+
+        $this->walletRepository
+            ->method('findById')
+            ->willReturnMap([
+                [1, $fromWallet],
+                [2, Wallet::create(1, $toCurrency)],
+            ]);
+
+        $this->exchangeRateService
+            ->method('getExchangeRateBetween')
+            ->willReturnMap([
+                [$fromCurrency, $toCurrency, $rateToTarget],
+                [$fromCurrency, Currency::EUR, $rateToEur],
+            ]);
+
+        $this->spreadService->method('calculateSpread')->willReturn('0.0000');
+
+        $transaction = $this->transferService->transfer(1, 1, 2, $amount);
+
+        self::assertSame($expectedAntiFraudCheck, $transaction->requiresAntiFraudCheck());
+        self::assertSame($expectedStatus, $transaction->getStatus());
+    }
+
+    public static function antiFraudThresholdDataProvider(): Generator
+    {
+        // Used to be flagged because 3 590 000 HUF is above 15 000 — it is only 100 EUR.
+        yield 'small EUR transfer into a low-value currency is not flagged' => [
+            'fromCurrency' => Currency::EUR,
+            'toCurrency' => Currency::HUF,
+            'rateToTarget' => 359.2288,
+            'rateToEur' => 1.0,
+            'amount' => '100.00',
+            'expectedAntiFraudCheck' => false,
+            'expectedStatus' => TransactionStatus::PENDING,
+        ];
+        // Used to slip through because the resulting 13 900 GBP is below 15 000.
+        yield 'large EUR transfer into a high-value currency is flagged' => [
+            'fromCurrency' => Currency::EUR,
+            'toCurrency' => Currency::GBP,
+            'rateToTarget' => 0.8684,
+            'rateToEur' => 1.0,
+            'amount' => '16000.00',
+            'expectedAntiFraudCheck' => true,
+            'expectedStatus' => TransactionStatus::FRAUD_REVIEW,
+        ];
+        yield 'exactly at the threshold is not flagged' => [
+            'fromCurrency' => Currency::EUR,
+            'toCurrency' => Currency::USD,
+            'rateToTarget' => 1.1624,
+            'rateToEur' => 1.0,
+            'amount' => '15000.00',
+            'expectedAntiFraudCheck' => false,
+            'expectedStatus' => TransactionStatus::PENDING,
+        ];
+        yield 'just above the threshold is flagged' => [
+            'fromCurrency' => Currency::EUR,
+            'toCurrency' => Currency::USD,
+            'rateToTarget' => 1.1624,
+            'rateToEur' => 1.0,
+            'amount' => '15000.01',
+            'expectedAntiFraudCheck' => true,
+            'expectedStatus' => TransactionStatus::FRAUD_REVIEW,
+        ];
+        yield 'transfer in a low-value currency worth more than the threshold is flagged' => [
+            'fromCurrency' => Currency::JPY,
+            'toCurrency' => Currency::PLN,
+            'rateToTarget' => 0.0229,
+            'rateToEur' => 0.0054,
+            'amount' => '3000000.00', // 16 200.00 EUR
+            'expectedAntiFraudCheck' => true,
+            'expectedStatus' => TransactionStatus::FRAUD_REVIEW,
+        ];
     }
 
     public function testTransferThrowsWhenSourceAndTargetAreTheSameWallet(): void

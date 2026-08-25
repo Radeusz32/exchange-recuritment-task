@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service;
 
 use App\Entity\Transaction;
+use App\Enum\Currency;
 use App\Exception\InsufficientFundsException;
 use App\Exception\SameWalletTransferException;
 use App\Exception\WalletBlockedException;
@@ -14,6 +15,9 @@ use App\Repository\WalletRepositoryInterface;
 
 readonly class TransferService
 {
+    /** Transfers worth more than this amount in EUR must be approved manually. */
+    public const float ANTI_FRAUD_THRESHOLD_EUR = 15_000.0;
+
     public function __construct(
         private WalletRepositoryInterface $walletRepository,
         private TransactionRepositoryInterface $transactionRepository,
@@ -76,11 +80,23 @@ readonly class TransferService
             toCurrency: $toCurrency,
             spread: $spread,
             exchangeRate: number_format($exchangeRate, 6, '.', ''),
-            requiresAntiFraudCheck: $toAmount > 15_000,
+            requiresAntiFraudCheck: $this->requiresAntiFraudCheck((float) $fromAmount, $fromCurrency),
         );
 
         $this->transactionRepository->save($transaction);
 
         return $transaction;
+    }
+
+    /**
+     * The threshold is defined in euro, so the transferred amount has to be converted
+     * to EUR first — comparing an amount denominated in JPY or HUF against it would
+     * flag ordinary transfers, while GBP or CHF ones would slip through.
+     */
+    private function requiresAntiFraudCheck(float $amount, Currency $currency): bool
+    {
+        $amountInEur = $amount * $this->exchangeRateService->getExchangeRateBetween($currency, Currency::EUR);
+
+        return $amountInEur > self::ANTI_FRAUD_THRESHOLD_EUR;
     }
 }
